@@ -1,23 +1,329 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Server Pointer</title>
-  <style>
-    body { font-family: system-ui, sans-serif; max-width: 36rem; margin: 3rem auto; padding: 0 1rem; }
-    pre { background: #8882; padding: 1rem; border-radius: 6px; overflow-x: auto; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Phone AI</title>
+<meta name="description" content="Chat with the language model running on my phone.">
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f24; --muted: #6a737d; --line: #e3e6ea;
+    --accent: #0f766e; --accent-ink: #ffffff; --user: #0f766e; --user-ink: #ffffff;
+    --think: #f1f3f5; --good: #16a34a; --bad: #dc2626; --warn: #d97706; --code: #eef0f2;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0e1214; --panel: #161b1e; --text: #e6e9ec; --muted: #8b949e; --line: #262d32;
+      --accent: #2dd4bf; --accent-ink: #062b27; --user: #115e59; --user-ink: #ecfeff;
+      --think: #1d2428; --code: #1f272b;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; padding-top: max(10px, env(safe-area-inset-top)); background: var(--panel); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 16px; margin: 0; font-weight: 650; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.on { background: var(--good); } .dot.off { background: var(--bad); } .dot.wait { background: var(--warn); }
+  #statusText { color: var(--muted); font-size: 13px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  button { font: inherit; cursor: pointer; }
+  .ghost { background: none; border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 5px 10px; font-size: 13px; }
+  .ghost:hover { border-color: var(--accent); }
+  #log { flex: 1; overflow-y: auto; padding: 16px; scroll-behavior: smooth; }
+  .wrap { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+  .empty { text-align: center; color: var(--muted); margin-top: 12vh; }
+  .empty h2 { color: var(--text); font-size: 20px; margin: 0 0 6px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 16px; }
+  .chips button { background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 999px; padding: 6px 12px; font-size: 13px; }
+  .chips button:hover { border-color: var(--accent); }
+  .msg { max-width: 88%; }
+  .msg.user { align-self: flex-end; }
+  .bubble { padding: 10px 14px; border-radius: 16px; overflow-wrap: anywhere; }
+  .user .bubble { background: var(--user); color: var(--user-ink); border-bottom-right-radius: 4px; white-space: pre-wrap; }
+  .bot .bubble { background: var(--panel); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+  .bot { align-self: flex-start; }
+  .imgs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .user .imgs { justify-content: flex-end; }
+  .imgs img { height: 96px; max-width: 160px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
+  details.think { background: var(--think); border-radius: 10px; margin-bottom: 8px; font-size: 13px; color: var(--muted); }
+  details.think summary { padding: 6px 10px; cursor: pointer; user-select: none; list-style: none; }
+  details.think summary::-webkit-details-marker { display: none; }
+  details.think summary::before { content: "▸ "; } details.think[open] summary::before { content: "▾ "; }
+  details.think .tbody { padding: 0 12px 10px; white-space: pre-wrap; max-height: 260px; overflow-y: auto; }
+  .pulse { animation: pulse 1.2s ease-in-out infinite; } @keyframes pulse { 50% { opacity: .45; } }
+  .meta { font-size: 12px; color: var(--muted); margin-top: 4px; padding-left: 4px; }
+  .err { color: var(--bad); }
+  .bubble p { margin: 0 0 .6em; } .bubble p:last-child { margin-bottom: 0; }
+  .bubble ul, .bubble ol { margin: .3em 0 .6em; padding-left: 1.4em; }
+  .bubble h1, .bubble h2, .bubble h3 { margin: .6em 0 .3em; font-size: 1.05em; }
+  .bubble code { background: var(--code); padding: 1px 5px; border-radius: 5px; font: 13px ui-monospace, Menlo, Consolas, monospace; }
+  .bubble pre { background: var(--code); padding: 10px 12px; border-radius: 10px; overflow-x: auto; margin: .5em 0; }
+  .bubble pre code { background: none; padding: 0; }
+  footer { background: var(--panel); border-top: 1px solid var(--line); padding: 10px 16px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+  #thumbs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .thumb { position: relative; } .thumb img { height: 64px; border-radius: 8px; border: 1px solid var(--line); display: block; }
+  .thumb button { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; border: 0; background: var(--bad); color: #fff; font-size: 13px; line-height: 20px; padding: 0; }
+  .composer { display: flex; gap: 8px; align-items: flex-end; }
+  textarea { flex: 1; resize: none; max-height: 160px; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; outline: none; }
+  textarea:focus { border-color: var(--accent); }
+  .icon { width: 40px; height: 40px; flex: none; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font-size: 18px; }
+  #send { background: var(--accent); color: var(--accent-ink); border: 0; font-weight: 650; }
+  #send.stop { background: var(--bad); color: #fff; }
+  #send:disabled { opacity: .45; cursor: default; }
+  .hint { max-width: 760px; margin: 6px auto 0; color: var(--muted); font-size: 12px; }
+  dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text); max-width: 420px; width: calc(100% - 32px); }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  dialog input { width: 100%; font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); color: var(--text); margin: 8px 0 12px; }
+  .row { display: flex; gap: 8px; justify-content: flex-end; }
+  .primary { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 6px 14px; font-weight: 600; }
+  #drop { position: fixed; inset: 0; background: rgba(15,118,110,.18); border: 3px dashed var(--accent); display: none; align-items: center; justify-content: center; font-size: 20px; pointer-events: none; }
+  #drop.on { display: flex; }
+</style>
 </head>
 <body>
-  <h1>Server Pointer</h1>
-  <p>Holds the active Cloudflare quick-tunnel URL in <code>server-url.json</code>.</p>
-  <pre id="out">Loading…</pre>
-  <script>
-    fetch('server-url.json?t=' + Date.now(), { cache: 'no-store' })
-      .then(r => r.json())
-      .then(j => { document.getElementById('out').textContent = JSON.stringify(j, null, 2); })
-      .catch(e => { document.getElementById('out').textContent = 'Error: ' + e; });
-  </script>
+<header>
+  <span class="dot wait" id="dot"></span>
+  <h1>Phone AI</h1>
+  <span id="statusText">Connecting…</span>
+  <button class="ghost" id="newChat" title="Start a new conversation">New chat</button>
+  <button class="ghost" id="keyBtn" title="API key (only if the server asks for one)">Key</button>
+</header>
+
+<div id="log"><div class="wrap" id="wrap"></div></div>
+
+<footer>
+  <div id="thumbs"></div>
+  <div class="composer">
+    <button class="icon" id="attach" title="Add pictures" aria-label="Add pictures">📎</button>
+    <textarea id="input" rows="1" placeholder="Message the model…"></textarea>
+    <button class="icon" id="send" aria-label="Send">➤</button>
+  </div>
+  <div class="hint">Enter to send, Shift+Enter for a new line. Runs on a phone, so replies take a moment. Pictures are shrunk before sending, and everything travels over the internet.</div>
+  <input type="file" id="file" accept="image/*" multiple hidden>
+</footer>
+
+<dialog id="keyDlg">
+  <strong>API key</strong>
+  <p style="color:var(--muted);margin:.3em 0 0;font-size:13px">Only needed if the server requires a key. It stays in this browser.</p>
+  <input id="keyInput" type="password" placeholder="sk-…" autocomplete="off">
+  <div class="row"><button class="ghost" id="keyCancel">Cancel</button><button class="primary" id="keySave">Save</button></div>
+</dialog>
+<div id="drop">Drop pictures to attach</div>
+
+<script>
+"use strict";
+const POINTER = "server-url.json";
+const MAX_IMG = 768;           // longest side after shrinking
+const HISTORY_CHARS = 6000;    // rough text budget (the model's context is small)
+const $ = (id) => document.getElementById(id);
+const wrap = $("wrap"), log = $("log"), input = $("input"), sendBtn = $("send");
+let messages = [];             // {role, text, images:[dataUri]}
+let pending = [];              // images waiting to be sent
+let busy = false, abort = null;
+let base = { url: null, at: 0 };
+
+const store = {
+  get(k) { try { return localStorage.getItem(k) || ""; } catch { return ""; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+
+/* ---------- finding the phone ---------- */
+async function serverUrl(force = false) {
+  if (!force && base.url && Date.now() - base.at < 30000) return base.url;
+  const r = await fetch(`${POINTER}?t=${Date.now()}`, { cache: "no-store" });
+  if (!r.ok) throw new Error("Pointer unavailable (" + r.status + ")");
+  const j = await r.json();
+  if (!j.server_url || j.status === "offline" || /dummy-url/.test(j.server_url)) throw new Error("The phone server is offline");
+  base = { url: j.server_url.replace(/\/$/, ""), at: Date.now() };
+  return base.url;
+}
+async function phoneFetch(path, init = {}) {
+  const run = async (force) => fetch((await serverUrl(force)) + path, init);
+  try { const res = await run(false); if (res.status !== 530) return res; } catch (e) { if (e.name === "AbortError") throw e; }
+  return run(true); // the tunnel moved: look the address up again once
+}
+async function checkHealth() {
+  const dot = $("dot"), txt = $("statusText");
+  try {
+    const t0 = performance.now();
+    const res = await phoneFetch("/health");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    dot.className = "dot on"; txt.textContent = "Phone online · " + Math.round(performance.now() - t0) + " ms";
+  } catch (e) { dot.className = "dot off"; txt.textContent = e.message.includes("offline") ? "Phone offline" : "Can't reach the phone (it may be restarting)"; }
+}
+
+/* ---------- tiny markdown ---------- */
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+function inline(s) {
+  return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>").replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>");
+}
+function md(src) {
+  const out = []; const lines = src.split("\n"); let i = 0;
+  while (i < lines.length) {
+    const l = lines[i];
+    if (/^```/.test(l)) { const code = []; i++; while (i < lines.length && !/^```/.test(lines[i])) code.push(lines[i++]); i++; out.push("<pre><code>" + esc(code.join("\n")) + "</code></pre>"); continue; }
+    const h = l.match(/^(#{1,3})\s+(.*)/); if (h) { out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); i++; continue; }
+    if (/^\s*[-*]\s+/.test(l)) { const it = []; while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) it.push("<li>" + inline(lines[i++].replace(/^\s*[-*]\s+/, "")) + "</li>"); out.push("<ul>" + it.join("") + "</ul>"); continue; }
+    if (/^\s*\d+[.)]\s+/.test(l)) { const it = []; while (i < lines.length && /^\s*\d+[.)]\s+/.test(lines[i])) it.push("<li>" + inline(lines[i++].replace(/^\s*\d+[.)]\s+/, "")) + "</li>"); out.push("<ol>" + it.join("") + "</ol>"); continue; }
+    if (!l.trim()) { i++; continue; }
+    const p = []; while (i < lines.length && lines[i].trim() && !/^(```|#{1,3}\s|\s*[-*]\s|\s*\d+[.)]\s)/.test(lines[i])) p.push(inline(lines[i++]));
+    out.push("<p>" + p.join("<br>") + "</p>");
+  }
+  return out.join("");
+}
+
+/* ---------- UI ---------- */
+function emptyState() {
+  wrap.innerHTML = `<div class="empty"><h2>Chat with the model on my phone</h2>
+    <div>Ask anything, or attach pictures and ask about them.</div>
+    <div class="chips">
+      <button>Explain how a phone can be a server</button>
+      <button>Write a haiku about monsoon rain</button>
+      <button>What are good habits for saving money?</button>
+    </div></div>`;
+  wrap.querySelectorAll(".chips button").forEach((b) => b.onclick = () => { input.value = b.textContent; send(); });
+}
+function addUser(text, images) {
+  const d = document.createElement("div"); d.className = "msg user";
+  d.innerHTML = (images.length ? `<div class="imgs">${images.map((u) => `<img src="${u}" alt="attached picture">`).join("")}</div>` : "") + (text ? `<div class="bubble">${esc(text)}</div>` : "");
+  if (!text) d.querySelector(".imgs").style.justifyContent = "flex-end";
+  wrap.appendChild(d); scroll();
+}
+function addBot() {
+  const d = document.createElement("div"); d.className = "msg bot";
+  d.innerHTML = `<details class="think" hidden><summary>Thinking…</summary><div class="tbody"></div></details><div class="bubble"><span class="pulse">…</span></div><div class="meta"></div>`;
+  wrap.appendChild(d); scroll();
+  return { root: d, think: d.querySelector(".think"), tsum: d.querySelector("summary"), tbody: d.querySelector(".tbody"), bubble: d.querySelector(".bubble"), meta: d.querySelector(".meta") };
+}
+function scroll() { requestAnimationFrame(() => { log.scrollTop = log.scrollHeight; }); }
+function setBusy(b) { busy = b; sendBtn.textContent = b ? "■" : "➤"; sendBtn.classList.toggle("stop", b); sendBtn.title = b ? "Stop" : "Send"; }
+
+/* ---------- pictures ---------- */
+function shrink(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, MAX_IMG / Math.max(img.width, img.height));
+      const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+      const g = c.getContext("2d"); g.fillStyle = "#fff"; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url); resolve(c.toDataURL("image/jpeg", 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Couldn't read that picture")); };
+    img.src = url;
+  });
+}
+async function addFiles(files) {
+  for (const f of files) {
+    if (!f.type.startsWith("image/")) continue;
+    if (pending.length >= 4) { alert("Up to 4 pictures per message."); break; }
+    try { pending.push(await shrink(f)); } catch (e) { alert(e.message); }
+  }
+  renderThumbs();
+}
+function renderThumbs() {
+  $("thumbs").innerHTML = "";
+  pending.forEach((u, i) => {
+    const t = document.createElement("div"); t.className = "thumb"; t.innerHTML = `<img src="${u}" alt="to be sent"><button aria-label="Remove">×</button>`;
+    t.querySelector("button").onclick = () => { pending.splice(i, 1); renderThumbs(); };
+    $("thumbs").appendChild(t);
+  });
+}
+
+/* ---------- sending ---------- */
+function buildPayload() {
+  // newest messages first, until the text budget is used; only the latest user turn keeps its pictures
+  const lastUser = messages.map((m) => m.role).lastIndexOf("user");
+  let budget = HISTORY_CHARS; const keep = [];
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i]; budget -= m.text.length; if (budget < 0 && keep.length) break; keep.unshift([i, m]);
+  }
+  return keep.map(([i, m]) => {
+    if (m.role === "user" && m.images.length && i === lastUser) {
+      return { role: "user", content: [...(m.text ? [{ type: "text", text: m.text }] : [{ type: "text", text: "Describe this." }]), ...m.images.map((u) => ({ type: "image_url", image_url: { url: u } }))] };
+    }
+    return { role: m.role, content: m.images.length ? (m.text + " [picture omitted]").trim() : m.text };
+  });
+}
+function friendly(status, body) {
+  const t = (() => { try { return JSON.parse(body).error.message; } catch { return body.slice(0, 200); } })();
+  if (status === 401) return "The server needs an API key. Click “Key” at the top and paste it.";
+  if (status === 503) return /busy|queue|Waited/.test(t) ? "The model is busy with another request. Try again in a moment." : "The model isn't running on the phone. Start it in the VPS Host app (LLM tab).";
+  if (status === 413) return "That message is too large. Send fewer or smaller pictures, or less text.";
+  if (status === 400 && /context/i.test(t)) return "The conversation no longer fits the model's memory. Start a new chat.";
+  if (status === 504) return "The model took too long and was stopped. Try a shorter question.";
+  if (status === 530 || status === 502) return "The phone's tunnel isn't answering. It may be restarting; try again in a minute.";
+  return "Server said " + status + ": " + t;
+}
+
+async function send() {
+  if (busy) { abort && abort.abort(); return; }
+  const text = input.value.trim(), images = pending.slice();
+  if (!text && !images.length) return;
+  if (wrap.querySelector(".empty")) wrap.innerHTML = "";
+  messages.push({ role: "user", text, images }); addUser(text, images);
+  input.value = ""; autosize(); pending = []; renderThumbs();
+  const ui = addBot(); setBusy(true); abort = new AbortController();
+  let answer = "", thinking = "", raf = 0, timings = null; const t0 = performance.now(); let tFirst = 0;
+  const paint = () => {
+    raf = 0;
+    if (thinking) { ui.think.hidden = false; ui.tbody.textContent = thinking; if (!answer) { ui.think.open = true; ui.tbody.scrollTop = ui.tbody.scrollHeight; } }
+    if (answer) ui.bubble.innerHTML = md(answer);
+    scroll();
+  };
+  try {
+    const headers = { "Content-Type": "application/json" }; const key = store.get("phoneKey"); if (key) headers.Authorization = "Bearer " + key;
+    const res = await phoneFetch("/v1/chat/completions", { method: "POST", headers, signal: abort.signal,
+      body: JSON.stringify({ messages: buildPayload(), stream: true, max_tokens: 1024, temperature: 0.7 }) });
+    if (!res.ok) throw new Error(friendly(res.status, await res.text()));
+    const reader = res.body.getReader(), dec = new TextDecoder(); let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true }); let nl;
+      while ((nl = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+        if (!line.startsWith("data:")) continue; const data = line.slice(5).trim(); if (data === "[DONE]") continue;
+        let j; try { j = JSON.parse(data); } catch { continue; }
+        if (j.error) throw new Error(j.error.message || "The model reported an error");
+        const d = j.choices && j.choices[0] && j.choices[0].delta || {};
+        if (j.timings) timings = j.timings;
+        if (d.reasoning_content) { thinking += d.reasoning_content; if (!tFirst) tFirst = performance.now(); }
+        if (d.content) { answer += d.content; if (!tFirst) tFirst = performance.now(); }
+        if (!raf) raf = requestAnimationFrame(paint);
+      }
+    }
+    paint();
+    if (!answer && !thinking) ui.bubble.innerHTML = '<span class="err">The model returned nothing. Try again.</span>';
+    else if (!answer) ui.bubble.innerHTML = '<span class="err">The model used its whole reply budget thinking. Ask again more simply, or open “Thinking” above to see its notes.</span>';
+    if (thinking) { ui.tsum.textContent = "Thought for " + Math.max(1, Math.round(((answer ? tFirst : performance.now()) - t0) / 1000)) + " s (show)"; ui.think.open = false; }
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    ui.meta.textContent = secs + " s" + (timings && timings.predicted_per_second ? " · " + timings.predicted_per_second.toFixed(1) + " tokens/s" : "");
+    messages.push({ role: "assistant", text: answer, images: [] });
+  } catch (e) {
+    if (raf) cancelAnimationFrame(raf);
+    if (e.name === "AbortError") { if (answer) ui.bubble.innerHTML = md(answer); else ui.bubble.innerHTML = '<span class="err">Stopped.</span>'; ui.meta.textContent = "stopped"; if (answer) messages.push({ role: "assistant", text: answer, images: [] }); else messages.pop(); }
+    else { ui.bubble.innerHTML = '<span class="err">' + esc(e.message) + "</span>"; messages.pop(); checkHealth(); }
+  } finally { setBusy(false); abort = null; input.focus(); }
+}
+
+/* ---------- wiring ---------- */
+function autosize() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 160) + "px"; }
+input.addEventListener("input", autosize);
+input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
+sendBtn.onclick = send;
+$("attach").onclick = () => $("file").click();
+$("file").onchange = (e) => { addFiles([...e.target.files]); e.target.value = ""; };
+input.addEventListener("paste", (e) => { const f = [...(e.clipboardData?.files || [])]; if (f.length) { e.preventDefault(); addFiles(f); } });
+let dragN = 0;
+addEventListener("dragenter", (e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) { dragN++; $("drop").classList.add("on"); } });
+addEventListener("dragleave", () => { if (--dragN <= 0) { dragN = 0; $("drop").classList.remove("on"); } });
+addEventListener("dragover", (e) => e.preventDefault());
+addEventListener("drop", (e) => { e.preventDefault(); dragN = 0; $("drop").classList.remove("on"); addFiles([...e.dataTransfer.files]); });
+$("newChat").onclick = () => { if (busy) abort && abort.abort(); messages = []; pending = []; renderThumbs(); emptyState(); };
+$("keyBtn").onclick = () => { $("keyInput").value = store.get("phoneKey"); $("keyDlg").showModal(); };
+$("keyCancel").onclick = () => $("keyDlg").close();
+$("keySave").onclick = () => { store.set("phoneKey", $("keyInput").value.trim()); $("keyDlg").close(); };
+
+emptyState(); checkHealth(); setInterval(() => { if (!busy) checkHealth(); }, 60000);
+</script>
 </body>
 </html>
