@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Server Pointer</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 36rem; margin: 3rem auto; padding: 0 1rem; }
+    pre { background: #8882; padding: 1rem; border-radius: 6px; overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <h1>Server Pointer</h1>
+  <p>Holds the active Cloudflare quick-tunnel URL in <code>server-url.json</code>.</p>
+  <pre id="out">Loading…</pre>
+  <script>
+    fetch('server-url.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(r => r.json())
+      .then(j => { document.getElementById('out').textContent = JSON.stringify(j, null, 2); })
+      .catch(e => { document.getElementById('out').textContent = 'Error: ' + e; });
+  </script>
+</body>
+</html>
